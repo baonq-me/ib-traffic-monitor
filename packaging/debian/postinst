@@ -1,0 +1,25 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+set -e
+
+case "$1" in
+    configure)
+        if [ -d /run/systemd/system ]; then
+            systemctl daemon-reload || true
+            systemctl enable ib-traffic-monitor.service >/dev/null 2>&1 || true
+
+            if [ -z "$2" ]; then
+                # fresh install. a host without a matching InfiniBand device
+                # makes the exporter exit, which must not fail the install
+                systemctl start ib-traffic-monitor.service || \
+                    echo "ib-traffic-monitor.service failed to start, check 'systemctl status ib-traffic-monitor.service'" >&2
+            else
+                systemctl try-restart ib-traffic-monitor.service || true
+            fi
+        fi
+        ;;
+esac
+
+exit 0
