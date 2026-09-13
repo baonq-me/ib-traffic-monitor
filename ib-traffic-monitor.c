@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+#include <arpa/inet.h>
 #include <errno.h>
 #include <getopt.h>
 #include <ncurses.h>
@@ -28,9 +29,10 @@
 #include <unistd.h>
 #include "infiniband.h"
 #include "ncurses_utils.h"
+#include "exporter.h"
 #include "utils.h"
 
-#define VERSION "1.4.1"
+#define VERSION "1.5.0"
 
 /* define usage function */
 static void usage(void) {
@@ -39,6 +41,9 @@ static void usage(void) {
         "usage: ib-traffic-monitor [-r|--refresh <second(s)>]\n"
         "                          [-e|--ethernet]\n"
         "                          [-m|--memory-lock]\n"
+        "                          [-d|--daemon]\n"
+        "                          [-l|--listen <ip address>]\n"
+        "                          [-p|--port <port>]\n"
         "                          [-h|--help]\n", VERSION
     );
 }
@@ -53,11 +58,14 @@ static void sigint_handler(int signo) {
 
 int main(int argc, char *argv[]) {
     /* define command-line options */
-    char *short_opts = "r:emh";
+    char *short_opts = "r:emdl:p:h";
     struct option long_opts[] = {
         {"refresh", required_argument, NULL, 'r'},
         {"ethernet", no_argument, NULL, 'e'},
         {"memory-lock", no_argument, NULL, 'm'},
+        {"daemon", no_argument, NULL, 'd'},
+        {"listen", required_argument, NULL, 'l'},
+        {"port", required_argument, NULL, 'p'},
         {"help", no_argument, NULL, 'h'},
         {NULL, 0, NULL, 0}
     };
@@ -65,6 +73,9 @@ int main(int argc, char *argv[]) {
     long int refresh_second = 5;
     int ethernet_flag = 0;
     int memory_lock_flag = 0;
+    int daemon_flag = 0;
+    char *exporter_address = EXPORTER_DEFAULT_ADDRESS;
+    long int exporter_port = EXPORTER_DEFAULT_PORT;
     int error_flag = 0;
     char error_msg[BUFSIZ];
     int exit_code = EXIT_SUCCESS;
@@ -103,6 +114,38 @@ int main(int argc, char *argv[]) {
                 break;
             case 'm':
                 memory_lock_flag = 1;
+                break;
+            case 'd':
+                daemon_flag = 1;
+                break;
+            case 'l':
+                {
+                    struct in_addr parsed_address;
+
+                    if (inet_pton(AF_INET, optarg, &parsed_address) != 1) {
+                        fprintf(stderr, "ERROR: listen address must be a valid IPv4 address\n\n");
+                        usage();
+                        exit(EXIT_FAILURE);
+                    }
+                }
+
+                exporter_address = optarg;
+                break;
+            case 'p':
+                errno = 0;
+                exporter_port = strtol(optarg, NULL, 10);
+
+                if (errno != 0) {
+                    fprintf(stderr, "ERROR: failed to convert port value\n\n");
+                    exit(EXIT_FAILURE);
+                }
+
+                if (exporter_port <= 0 || exporter_port > 65535) {
+                    fprintf(stderr, "ERROR: port must be an integer between 1 and 65535\n\n");
+                    usage();
+                    exit(EXIT_FAILURE);
+                }
+
                 break;
             case 'h':
                 usage();
@@ -187,6 +230,48 @@ int main(int argc, char *argv[]) {
     if (sigaction(SIGINT, &sa, NULL) < 0) {
         fprintf(stderr, "ERROR: failed to install signal handler\n");
         exit(EXIT_FAILURE);
+    }
+
+    /* daemon mode: no TUI, serve metrics over HTTP until SIGINT is caught */
+    if (daemon_flag > 0) {
+        /* a disconnecting scraper must not terminate the process */
+        struct sigaction sa_pipe;
+        sa_pipe.sa_handler = SIG_IGN;
+        sa_pipe.sa_flags = 0;
+
+        if (sigemptyset(&sa_pipe.sa_mask) < 0) {
+            fprintf(stderr, "ERROR: failed to clear signal set sa_pipe.sa_mask\n");
+            exit(EXIT_FAILURE);
+        }
+
+        if (sigaction(SIGPIPE, &sa_pipe, NULL) < 0) {
+            fprintf(stderr, "ERROR: failed to ignore SIGPIPE signal\n");
+            exit(EXIT_FAILURE);
+        }
+
+        /* fail fast on a host without any matching device, as the TUI does */
+        int ret_get_infiniband_metrics = get_infiniband_metrics(&cur_infiniband_metrics, ethernet_flag);
+
+        if (ret_get_infiniband_metrics < 0) {
+            fprintf(stderr, "ERROR: unable to retrieve InfiniBand metrics\n");
+            exit(EXIT_FAILURE);
+        }
+
+        if (ret_get_infiniband_metrics == 0) {
+            fprintf(stderr, "ERROR: no InfiniBand device found\n");
+            exit(EXIT_FAILURE);
+        }
+
+        if (exporter_run_server(VERSION, exporter_address, exporter_port, ethernet_flag, &signal_empty_set, &break_flag) < 0) {
+            exit_code = EXIT_FAILURE;
+        }
+
+        /* unlock memory */
+        if (memory_lock_flag > 0) {
+            munlockall();
+        }
+
+        exit(exit_code);
     }
 
     /* initialize ncurses window struct */
