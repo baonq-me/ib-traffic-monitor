@@ -1,0 +1,17 @@
+Package: ib-traffic-monitor
+Version: @VERSION@
+Architecture: @ARCH@
+Maintainer: @MAINTAINER@
+Installed-Size: @INSTALLED_SIZE@
+Depends: @DEPENDS@
+Section: net
+Priority: optional
+Homepage: https://github.com/NVIDIA/ib-traffic-monitor
+Description: InfiniBand traffic monitor and Prometheus exporter
+ ib-traffic-monitor reports the metrics of the local InfiniBand devices read
+ from /sys/class/infiniband: link status, per-second traffic counters and
+ cumulative error counters.
+ .
+ It runs either as an ncurses TUI or, with --daemon, headless as a Prometheus
+ exporter serving /metrics over HTTP. This package ships a systemd service for
+ the headless mode, configured through /etc/default/ib-traffic-monitor.

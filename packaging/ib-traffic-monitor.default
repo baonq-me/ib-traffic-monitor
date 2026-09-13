@@ -1,0 +1,11 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Command-line arguments passed to ib-traffic-monitor by the systemd service.
+# --daemon is always added by the unit file.
+#
+#   --listen <ip address>  IPv4 address to bind, default 0.0.0.0
+#   --port <port>          TCP port to bind, default 19315
+#   --ethernet             also export Ethernet link layer (RoCE) ports
+#
+IB_TRAFFIC_MONITOR_ARGS="--listen 0.0.0.0 --port 19315"

@@ -1,0 +1,17 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+set -e
+
+case "$1" in
+    remove|purge)
+        if [ -d /run/systemd/system ]; then
+            systemctl disable ib-traffic-monitor.service >/dev/null 2>&1 || true
+            systemctl daemon-reload || true
+            systemctl reset-failed ib-traffic-monitor.service >/dev/null 2>&1 || true
+        fi
+        ;;
+esac
+
+exit 0

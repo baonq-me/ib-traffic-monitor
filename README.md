@@ -74,6 +74,54 @@ usage: ib-traffic-monitor [-r|--refresh <second(s)>]
 
 `-h` or `--help`: show help message
 
+## Debian Package
+
+`packaging/build-deb.sh` builds a `.deb` containing the binary, the systemd service and its defaults file. It needs `dpkg-deb`, `make` and a compiler, and writes the package into `dist/` unless another output directory is given. The version of the package is the `VERSION` define of the program.
+
+```
+$ ./packaging/build-deb.sh
+building ib-traffic-monitor 1.4.1 for arm64
+...
+dependencies: libc6 (>= 2.34), libncurses6 (>= 6), libtinfo6 (>= 6)
+dpkg-deb: building package 'ib-traffic-monitor' in 'dist/ib-traffic-monitor_1.4.1_arm64.deb'.
+
+package: dist/ib-traffic-monitor_1.4.1_arm64.deb
+install: sudo apt install dist/ib-traffic-monitor_1.4.1_arm64.deb
+```
+
+The package is built with `make release`, which uses the same warning set as the development build but drops the undefined behavior sanitizer and turns on optimization and the usual hardening flags. The `MAINTAINER` and `ARCH` environment variables override the maintainer field and the target architecture.
+
+Package contents:
+
+| Path | Description |
+| --- | --- |
+| `/usr/bin/ib-traffic-monitor` | the program |
+| `/lib/systemd/system/ib-traffic-monitor.service` | systemd service running the headless exporter |
+| `/etc/default/ib-traffic-monitor` | arguments passed to the program, a conffile |
+
+## Systemd Service
+
+Installing the package enables and starts `ib-traffic-monitor.service`, which runs the program headless with `--daemon`, serving the metrics over HTTP for Prometheus instead of drawing the TUI. On a host with no matching device the program exits and systemd retries every 5 seconds, so add `--ethernet` to the arguments when the ports to monitor are RoCE ports.
+
+```
+$ sudo systemctl status ib-traffic-monitor
+$ sudo journalctl -u ib-traffic-monitor -f
+$ curl -s http://127.0.0.1:19315/metrics
+```
+
+The arguments come from `/etc/default/ib-traffic-monitor`, `--daemon` is always added by the unit:
+
+```
+IB_TRAFFIC_MONITOR_ARGS="--listen 0.0.0.0 --port 19315"
+```
+
+```
+$ sudo editor /etc/default/ib-traffic-monitor
+$ sudo systemctl restart ib-traffic-monitor
+```
+
+The service reads only world-readable files under `/sys/class/infiniband`, so it runs as a `DynamicUser` with no capabilities and the usual systemd sandboxing (`ProtectSystem=strict`, `PrivateDevices=yes`, `SystemCallFilter=@system-service`, and more). Binding a port below 1024 or using `--memory-lock` is therefore not possible without relaxing the unit.
+
 ## ChangeLog
 
 ```
