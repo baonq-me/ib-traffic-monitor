@@ -21,9 +21,30 @@ OBJS = $(SRCS:.c=.o)
 TARGET = ib-traffic-monitor
 LDFLAGS = -lncurses
 
-.PHONY: all clean
+# same warning set as the development build, without the sanitizer and with
+# the hardening flags expected from a distributed package
+RELEASE_CFLAGS = -O2 -Wall -Wextra -Wpedantic -Wconversion -Wdouble-promotion -Wunused -Wshadow -Wsign-conversion -D_FORTIFY_SOURCE=2 -fstack-protector-strong
+RELEASE_LDFLAGS = -lncurses -Wl,-z,relro,-z,now
+
+DESTDIR ?=
+PREFIX ?= /usr
+BINDIR ?= $(PREFIX)/bin
+SYSTEMDDIR ?= /lib/systemd/system
+DEFAULTDIR ?= /etc/default
+INSTALL ?= install
+
+.PHONY: all clean release install
 
 all: $(TARGET)
+
+release: clean
+	$(MAKE) CFLAGS="$(RELEASE_CFLAGS)" LDFLAGS="$(RELEASE_LDFLAGS)" $(TARGET)
+
+install: $(TARGET)
+	$(INSTALL) -d $(DESTDIR)$(BINDIR) $(DESTDIR)$(SYSTEMDDIR) $(DESTDIR)$(DEFAULTDIR)
+	$(INSTALL) -m 0755 $(TARGET) $(DESTDIR)$(BINDIR)/$(TARGET)
+	$(INSTALL) -m 0644 packaging/ib-traffic-monitor.service $(DESTDIR)$(SYSTEMDDIR)/ib-traffic-monitor.service
+	$(INSTALL) -m 0644 packaging/ib-traffic-monitor.default $(DESTDIR)$(DEFAULTDIR)/ib-traffic-monitor
 
 $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $^ $(LDFLAGS)
