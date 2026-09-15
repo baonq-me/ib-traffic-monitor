@@ -16,7 +16,7 @@
 CC = gcc
 CFLAGS = -g -Wall -Wextra -Wpedantic -Wconversion -Wdouble-promotion -Wunused -Wshadow -Wsign-conversion -fsanitize=undefined
 INCLUDES = -I.
-SRCS = ib-traffic-monitor.c infiniband.c utils.c ncurses_utils.c
+SRCS = ib-traffic-monitor.c infiniband.c utils.c ncurses_utils.c exporter.c
 OBJS = $(SRCS:.c=.o)
 TARGET = ib-traffic-monitor
 LDFLAGS = -lncurses
